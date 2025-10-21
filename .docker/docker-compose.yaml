@@ -1,0 +1,19 @@
+services:
+  lanenet-ml:
+    build:
+      context: .
+      shm_size: "2gb"
+    shm_size: "2gb"
+    image: lane-detection-lunzer_lanenet
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    volumes:
+      - ..:/workspace
+    #deploy:   Auskommentieren wenn GPU nicht vorhanden ist
+      #resources:
+        #reservations:
+          #devices:
+            #+- driver: nvidia
+              #count: 1
+              #capabilities: [gpu]
