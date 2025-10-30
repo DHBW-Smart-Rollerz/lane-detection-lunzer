@@ -11,22 +11,23 @@ data_path = os.path.join(base_path,"data")
 class DataParser():
     cleaned_dataframe = pd.DataFrame()
 
-    def __init__(self, task_names_to_load_list):
+    def __init__(self, task_names_to_load_list, jobs_to_ommit: list = []):
         raw_data_list = []
         for task in task_names_to_load_list:
-            parsed_task_data = self._parse_task_data(task)
+            parsed_task_data = self._parse_task_data(task, jobs_to_ommit)
             raw_data_list.extend(parsed_task_data)
         raw_df = pd.DataFrame.from_dict(raw_data_list)
         self.cleaned_dataframe = self._clean_unlabeled_data(raw_df)
         return
 
-    def _parse_task_data(self, task_name_to_load):
+    def _parse_task_data(self, task_name_to_load :list, jobs_to_ommit: list) -> list:
         parsed_task_data = []
         root = self._read_xml(task_name_to_load)
+        excluded_image_ids = self._get_image_ids_to_ommit(root, jobs_to_ommit)
         for child in root:
-            if child.tag == "image":
+            if child.tag == "image" and int(child.attrib["id"]) not in excluded_image_ids :
                 dataset = {}
-                dataset["task_name"] = self._get_task_name(child.attrib["name"])
+                dataset["task_name"] = self._get_task_name_from_root(root)
                 dataset["image_id"] = child.attrib["id"]
                 dataset["image_path"] = self._img_path_from_name(child.attrib["name"], task_name_to_load)
                 dataset["image_width"] = child.attrib["width"]
@@ -43,9 +44,70 @@ class DataParser():
         tree = ET.parse(label_location)
         root = tree.getroot() 
         return root
+    
+    def _get_image_ids_to_ommit(self, xml_root, jobs_to_ommit: list) -> set[int]:
+        """
+        Liefert die Menge aller image_ids (Frames), die ausgelassen werden sollen,
+        basierend auf den Job-/Segment-IDs in 'jobs_to_ommit'.
+        Akzeptiert Job-IDs als int, "123" oder URLs wie ".../api/jobs/123".
+        """
+        root = xml_root
 
-    def _get_task_name(self, attribute_name_value):
-        return(attribute_name_value[8:15])
+        # --- Job-ID-Input normalisieren -> Set[int]
+        jobs_set: set[int] = set()
+        for j in (jobs_to_ommit or []):
+            if isinstance(j, str):
+                m = re.search(r'(\d+)$', j.strip())  # unterstützt auch URLs
+                if m:
+                    j = int(m.group(1))
+                else:
+                    try:
+                        j = int(j)
+                    except Exception:
+                        continue
+            try:
+                jobs_set.add(int(j))
+            except Exception:
+                pass
+
+        if not jobs_set:
+            return set()
+
+        # --- Segmente lesen und image_ids (start..stop inkl.) sammeln
+        excluded_image_ids: set[int] = set()
+        try:
+            meta = root.find("meta")
+            task = meta.find("task") if meta is not None else None
+            segments = task.find("segments") if task is not None else None
+
+            if segments is not None:
+                for seg in segments.findall("segment"):
+                    seg_id_txt = seg.findtext("id")
+                    try:
+                        seg_id = int(seg_id_txt)
+                    except Exception:
+                        continue
+
+                    if seg_id in jobs_set:
+                        try:
+                            start = int(seg.findtext("start"))
+                            stop = int(seg.findtext("stop"))
+                        except Exception:
+                            continue
+                        excluded_image_ids.update(range(start, stop + 1))
+        except Exception:
+            # Wenn Meta/Task/Segments fehlen, gibt es nichts zu omittten
+            return set()
+
+        return excluded_image_ids
+
+    def _get_task_name_from_root(self, root) -> str:
+        """
+        Liest <meta>/<task>/<name> aus dem CVAT-XML.
+        Gibt '' zurück, wenn nicht vorhanden.
+        """
+        name = root.findtext('./meta/task/name')
+        return name.strip() if name else ''
 
     def _img_path_from_name(self, attribute_name_value, task):
         img_folder_path = os.path.join(data_path,task,"img")
@@ -74,7 +136,8 @@ class DataParser():
 
 if __name__ == "__main__":
     task_names_to_load = ["2023-05", "2023-06", "2023-10", "2023-12", "2025-05"]
-    data = DataParser(task_names_to_load).get_data()
+    jobs_to_ommit = [119, 120, 121, 111, 112, 113, 114, 115, 116, 117]
+    data = DataParser(task_names_to_load, jobs_to_ommit).get_data()
     df = pd.DataFrame.from_dict(data)
     df.to_excel("excel.xlsx")
     print(df)

@@ -4,7 +4,7 @@ import time
 import cv2
 import re
 import numpy as np
-from typing import Iterable, Tuple, Union
+from typing import Iterable, Tuple
 
 def send_frame_to_server(vis_bgr, url="http://localhost:8000/push", quality=90):
     # als JPEG kodieren (klein & schnell für Stream)
@@ -34,35 +34,27 @@ def split_point_string_to_points(string):
 def draw_points(
     img: np.ndarray,
     points: Iterable[Tuple[float, float]],
-    color: Union[Tuple[int, int, int], str] = (0, 255, 0),
+    color: str,
     radius: int = 4,
     thickness: int = -1,
-    assume_rgb: bool = False,
     clip: bool = True,
 ) -> np.ndarray:
     
     if img is None or not isinstance(img, np.ndarray) or img.ndim < 2:
         raise ValueError("img muss ein gültiges OpenCV-Array sein")
-
-    # Farbe in BGR umwandeln
-    def to_bgr(c: Color) -> Tuple[int, int, int]:
-        if isinstance(c, str):
-            c = c.strip()
-            if c.startswith("#") and len(c) == 7:
-                r = int(c[1:3], 16)
-                g = int(c[3:5], 16)
-                b = int(c[5:7], 16)
-                return (b, g, r)
-            else:
-                raise ValueError("Hex-Farbe muss Format '#RRGGBB' haben")
-        if isinstance(c, (tuple, list)) and len(c) == 3:
-            r, g, b = c if assume_rgb else (c[2], c[1], c[0])  # falls BGR übergeben
-            return (b, g, r) if assume_rgb else tuple(c)  # Ziel immer BGR
-        raise ValueError("Farbe als (B,G,R), (R,G,B mit assume_rgb=True) oder '#RRGGBB' angeben")
-
-    bgr = to_bgr(color)
+    
+    if color == "blue":
+        bgr = (255, 0, 0)
+    elif color == "green":
+        bgr = (0, 255, 0)
+    elif color == "red":
+        bgr = (0, 0, 255)
+    else:
+        raise ValueError("Color muss einer der folgenden strings sein: blue,green,red")
 
     h, w = img.shape[:2]
+    last_xi = None
+    last_yi = None
     for xy in points:
         if xy is None or len(xy) != 2:
             continue
@@ -70,24 +62,41 @@ def draw_points(
         xi, yi = int(round(x)), int(round(y))
 
         if clip:
-            if xi < 0 or yi < 0 or xi >= w or yi >= h:
+            if xi < 0 or yi < 0 or xi > w or yi > h:
                 continue
         # Anti-aliased Kreis (AA wirkt v.a. bei dünnen Linien)
         cv2.circle(img, (xi, yi), radius, bgr, thickness, lineType=cv2.LINE_AA)
+        if last_xi and last_yi != None:
+            cv2.line(img, (last_xi, last_yi), (xi, yi), bgr, 2, lineType=cv2.LINE_AA)
+        last_xi = xi
+        last_yi = yi
+    
 
     return img
 
-task_names_to_load = ["2023-05", "2023-06", "2023-10", "2023-12", "2025-05"]
-data = DataParser(task_names_to_load).get_data()
-
-sample_data = data.sample(n=100)
-
-for index, row in sample_data.iterrows():
-    print(index)
-    print(split_point_string_to_points(row["left lane"]))
-    print(row["image_path"])
+def draw_lanes(img, data_row):
+    left_lane_data = split_point_string_to_points(data_row["left lane"])
+    center_lane_data = split_point_string_to_points(data_row["center lane"])
+    right_lane_data = split_point_string_to_points(data_row["right lane"])
     
-    img = load_image(row["image_path"])
-    send_frame_to_server(img)
-    time.sleep(2)
+    img = draw_points(img, left_lane_data, "red")
+    img = draw_points(img, center_lane_data, "green")
+    img = draw_points(img, right_lane_data, "blue")
+    return img
+    
+    
+if __name__ == "__main__":
+    task_names_to_load = ["2023-05", "2023-06", "2023-10", "2023-12", "2025-05"]
+    jobs_to_ommit = [119, 120, 121, 111, 112, 113, 114, 115, 116, 117]
+    data = DataParser(task_names_to_load, jobs_to_ommit).get_data()
+
+    sample_data = data.sample(n=100)
+
+    for index, row in sample_data.iterrows():
+    
+        img = load_image(row["image_path"])
+        img = draw_lanes(img, row)
+        send_frame_to_server(img)
+        print(row["image_path"])
+        time.sleep(0.5)
     
