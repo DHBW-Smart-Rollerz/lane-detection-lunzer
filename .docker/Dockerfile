@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir \
 RUN pip install --no-cache-dir \
     opencv-python-headless onnx onnxruntime numpy scipy matplotlib \
     albumentations tqdm pyyaml rich hydra-core jupyter ipykernel \
-    pandas
+    pandas fastapi uvicorn
 
 # Arbeitsverzeichnis für deinen Quellcode festlegen
 WORKDIR /workspace

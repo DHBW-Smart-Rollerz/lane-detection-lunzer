@@ -70,7 +70,6 @@ def draw_points(
             cv2.line(img, (last_xi, last_yi), (xi, yi), bgr, 2, lineType=cv2.LINE_AA)
         last_xi = xi
         last_yi = yi
-    
 
     return img
 
@@ -92,11 +91,10 @@ if __name__ == "__main__":
 
     sample_data = data.sample(n=100)
 
-    for index, row in sample_data.iterrows():
+    for index, row in data.iterrows():
     
         img = load_image(row["image_path"])
         img = draw_lanes(img, row)
         send_frame_to_server(img)
         print(row["image_path"])
-        time.sleep(0.5)
-    
+        time.sleep(0.4)
