@@ -1,5 +1,6 @@
 from load_data import get_current_data
 from visualize_original_label import split_point_string_to_points
+from visualize_original_label import load_image, draw_lanes, send_frame_to_server
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
@@ -46,22 +47,25 @@ def create_lane_polynomials(row):
 
 def plot_lanes(row):
     left_lane_data, center_lane_data, right_lane_data = get_points_of_all_3_lanes(row)
+    fig = go.Figure()
     if left_lane_data:
         x_array, y_array = create_xy_arrays(left_lane_data)
     else: 
         left_lane_data = None
-    fig = px.scatter(x=x_array, y=y_array)
+    fig.add_scatter(x=x_array, y=y_array, mode = "markers", marker = dict(size = 6, symbol = "circle", color = "red"))
     if center_lane_data:
         x_array, y_array = create_xy_arrays(center_lane_data)
     else:
         center_lane_data = None
-    fig.add_scatter(x=x_array, y=y_array)
+    fig.add_scatter(x=x_array, y=y_array, mode = "markers", marker = dict(size = 6, symbol = "circle", color = "green"))
     if right_lane_data:
         x_array, y_array = create_xy_arrays(right_lane_data)
     else:
         right_lane_data = None
-    fig.add_scatter(x=x_array, y=y_array)
+    fig.add_scatter(x=x_array, y=y_array, mode = "markers", marker = dict(size = 6, symbol = "circle", color = "blue"))
     
+    fig.update_yaxes(autorange="reversed") #Ans CV2 Koordinatensystem anpassen (Y invertiert)
+    fig.update_layout(yaxis_rangemode='tozero', xaxis_rangemode='tozero') #Auf 0 Legen ohne negative abschnitte im Graph
     return fig
     
     
@@ -79,6 +83,9 @@ if __name__ == "__main__":
         left_lane_data, center_lane_data, right_lane_data = get_points_of_all_3_lanes(row)
         fig = plot_lanes(row)
         fig.show()
+        img = load_image(row["image_path"])
+        img = draw_lanes(img, row)
+        send_frame_to_server(img)
         
         
     
