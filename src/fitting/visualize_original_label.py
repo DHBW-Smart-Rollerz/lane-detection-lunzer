@@ -1,4 +1,4 @@
-from load_data import DataParser
+from load_data import get_current_data
 import urllib.request
 import time
 import cv2
@@ -85,14 +85,12 @@ def draw_lanes(img, data_row):
     
     
 if __name__ == "__main__":
-    task_names_to_load = ["2023-05", "2023-06", "2023-10", "2023-12", "2025-05"]
-    jobs_to_ommit = [119, 120, 121, 111, 112, 113, 114, 115, 116, 117]
-    data = DataParser(task_names_to_load, jobs_to_ommit).get_data()
-
+    
+    data = get_current_data()
     sample_data = data.sample(n=100)
 
-    for index, row in data.iterrows():
-    
+    for index, row in sample_data.iterrows():
+        
         img = load_image(row["image_path"])
         img = draw_lanes(img, row)
         send_frame_to_server(img)

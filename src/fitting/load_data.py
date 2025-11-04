@@ -9,7 +9,7 @@ data_path = os.path.join(base_path,"data")
 
 #Class
 class DataParser():
-    cleaned_dataframe = pd.DataFrame()
+    #cleaned_dataframe = pd.DataFrame()
 
     def __init__(self, task_names_to_load_list, jobs_to_ommit: list = []):
         raw_data_list = []
@@ -133,12 +133,21 @@ class DataParser():
 
     def get_data(self):
         return self.cleaned_dataframe
+    
+def get_current_data():
+    """Lädt mit den vorhandenen Task Names und Jobs to ommit die Daten
 
-if __name__ == "__main__":
+    Returns:
+        PandasDataframe: Daten
+    """
     task_names_to_load = ["2023-05", "2023-06", "2023-10", "2023-12", "2025-05"]
     jobs_to_ommit = [119, 120, 121, 111, 112, 113, 114, 115, 116, 117]
-    data = DataParser(task_names_to_load, jobs_to_ommit).get_data()
-    df = pd.DataFrame.from_dict(data)
-    df.to_excel("excel.xlsx")
-    print(df)
+    data = DataParser(task_names_to_load, jobs_to_ommit).cleaned_dataframe
+    
+    return data
+
+if __name__ == "__main__":
+    data = get_current_data()
+    data.to_excel("excel.xlsx")
+    print(data)
     
