@@ -1,11 +1,15 @@
-#!/usr/bin/env python3
 import asyncio
-from typing import Optional, Set
 from datetime import datetime
+from typing import Optional, Set
 
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import HTMLResponse, Response, StreamingResponse, PlainTextResponse
 import uvicorn
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import (
+    HTMLResponse,
+    PlainTextResponse,
+    Response,
+    StreamingResponse,
+)
 
 app = FastAPI(title="Push2View (SSE + latest)")
 
@@ -20,7 +24,6 @@ queues_lock = asyncio.Lock()
 
 
 async def _broadcast(seq: int):
-
     async with queues_lock:
         dead = []
         for q in client_queues:
@@ -33,7 +36,6 @@ async def _broadcast(seq: int):
             try:
                 q.put_nowait(seq)
             except asyncio.QueueFull:
-
                 pass
             except Exception:
                 dead.append(q)
@@ -53,7 +55,9 @@ async def push(request: Request):
         raise HTTPException(status_code=400, detail="Empty body")
 
     ct = request.headers.get("content-type", "application/octet-stream").lower()
-    latest_mime = "image/jpeg" if "jpeg" in ct or "jpg" in ct else "application/octet-stream"
+    latest_mime = (
+        "image/jpeg" if "jpeg" in ct or "jpg" in ct else "application/octet-stream"
+    )
 
     latest_frame = body
     frame_seq += 1
@@ -89,7 +93,6 @@ async def sse():
     q: asyncio.Queue[int] = asyncio.Queue(maxsize=1)
 
     async def gen():
-
         if latest_frame is not None:
             try:
                 # initiale Nachricht
@@ -109,7 +112,6 @@ async def sse():
                 finally:
                     q.task_done()
         except asyncio.CancelledError:
-
             pass
         finally:
             async with queues_lock:
