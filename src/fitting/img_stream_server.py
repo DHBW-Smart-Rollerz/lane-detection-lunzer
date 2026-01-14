@@ -1,3 +1,11 @@
+"""
+Lightweight image streaming server using Server-Sent Events (SSE).
+
+The server accepts pushed image frames via HTTP POST, stores only the
+latest frame in memory, and notifies connected clients via SSE when a
+new frame is available. Clients fetch the updated image on demand.
+"""
+
 import asyncio
 from datetime import datetime
 from typing import Optional, Set
@@ -24,6 +32,17 @@ queues_lock = asyncio.Lock()
 
 
 async def _broadcast(seq: int):
+    """
+    Broadcast a frame update signal to all connected SSE clients.
+
+    Each client receives the latest frame sequence number. If a client's
+    queue is full, the oldest entry is dropped to ensure only the most
+    recent update is delivered.
+
+    Args:
+        seq (int):
+            Monotonically increasing frame sequence number.
+    """
     async with queues_lock:
         dead = []
         for q in client_queues:
@@ -46,7 +65,19 @@ async def _broadcast(seq: int):
 @app.post("/push")
 async def push(request: Request):
     """
-    Akzeptiert raw JPEG (application/octet-stream) und triggert ein Update-Signal.
+    Receive a new image frame and notify connected clients.
+
+    Expects raw image bytes in the request body (typically JPEG). The
+    frame is stored in memory as the current latest frame and a broadcast
+    update is sent to all SSE clients.
+
+    Raises:
+        HTTPException:
+            400 if the request body is empty.
+
+    Returns:
+        PlainTextResponse:
+            "ok" on success.
     """
     global latest_frame, frame_seq, latest_mime
 
@@ -70,7 +101,22 @@ async def push(request: Request):
 @app.get("/latest")
 async def latest(seq: Optional[int] = None):
     """
-    Gibt das letzte Bild zurück. 'seq' dient nur zum Cache-Busting in der URL.
+    Return the most recently pushed image frame.
+
+    The optional 'seq' query parameter is ignored by the server and exists
+    only for client-side cache busting.
+
+    Args:
+        seq (Optional[int]):
+            Optional sequence number for cache busting.
+
+    Raises:
+        HTTPException:
+            404 if no frame has been pushed yet.
+
+    Returns:
+        Response:
+            Raw image bytes with appropriate headers disabling caching.
     """
     if latest_frame is None:
         raise HTTPException(status_code=404, detail="No frame yet")
@@ -87,12 +133,26 @@ async def latest(seq: Optional[int] = None):
 @app.get("/events")
 async def sse():
     """
-    Server-Sent Events: schickt nur die aktuelle frame_seq bei Änderungen.
-    Extrem leichtgewichtig.
+    Server-Sent Events (SSE) endpoint for frame update notifications.
+
+    Sends the current frame sequence number whenever a new frame is pushed.
+    The payload contains only the sequence number; clients are expected to
+    fetch the actual image via the /latest endpoint.
+
+    Returns:
+        StreamingResponse:
+            SSE stream emitting frame sequence updates.
     """
     q: asyncio.Queue[int] = asyncio.Queue(maxsize=1)
 
     async def gen():
+        """
+        Asynchronous generator producing SSE messages.
+
+        Registers the client, sends an initial event if a frame already
+        exists, and then emits updates whenever a new frame sequence
+        number is broadcast.
+        """
         if latest_frame is not None:
             try:
                 # initiale Nachricht
@@ -129,8 +189,15 @@ async def sse():
 @app.get("/view")
 async def view():
     """
-    Simple Viewer: hält eine SSE-Verbindung und setzt das <img> nur bei neuen Frames neu.
-    Kein Polling, minimale Last.
+    Serve a minimal HTML-based live image viewer.
+
+    The viewer establishes an SSE connection to receive frame updates and
+    reloads the displayed image only when a new frame is available. This
+    avoids polling and minimizes network and CPU usage.
+
+    Returns:
+        HTMLResponse:
+            Self-contained HTML page with embedded JavaScript viewer.
     """
     html = f"""<!doctype html>
 <html lang="de">
@@ -195,6 +262,13 @@ async def view():
 
 @app.get("/")
 async def root():
+    """
+    Root endpoint with a short usage hint.
+
+    Returns:
+        HTMLResponse:
+            Minimal HTML page pointing to the viewer and push endpoint.
+    """
     return HTMLResponse(
         '<!doctype html><meta charset="utf-8">'
         '<p>Öffne <a href="/view">/view</a>. Sende Frames an <code>POST /push</code> (raw JPEG bytes).</p>'

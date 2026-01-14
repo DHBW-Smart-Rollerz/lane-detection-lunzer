@@ -11,6 +11,23 @@ from visualize_original_label import (
 
 
 def get_points_of_all_3_lanes(data_row):
+    """
+    Extract polyline point lists for left, center, and right lane from one dataset row.
+
+    The function reads the lane columns ("left lane", "center lane", "right lane") and
+    converts each polyline point string into a list of (x, y) tuples using
+    `split_point_string_to_points`.
+
+    Args:
+        data_row:
+            A pandas Series or dict-like row containing lane label fields.
+
+    Returns:
+        tuple[list[tuple[float, float]] | None, list[tuple[float, float]] | None, list[tuple[float, float]] | None]:
+            (left_lane_points, center_lane_points, right_lane_points). Each entry may be
+            an empty list or None if the lane is missing/unparsable, depending on the
+            behavior of `split_point_string_to_points`.
+    """
     left_lane_data = split_point_string_to_points(data_row["left lane"])
     center_lane_data = split_point_string_to_points(data_row["center lane"])
     right_lane_data = split_point_string_to_points(data_row["right lane"])
@@ -18,6 +35,19 @@ def get_points_of_all_3_lanes(data_row):
 
 
 def create_xy_arrays(points):
+    """
+    Convert a list of (x, y) points into separate x- and y-coordinate arrays.
+
+    Invalid entries (None or not length 2) are skipped and reported via stdout.
+
+    Args:
+        points (list):
+            Iterable of point-like entries, expected to be (x, y) pairs.
+
+    Returns:
+        tuple[list[float], list[float]]:
+            Two lists (x_array, y_array) containing x and y coordinates in the same order.
+    """
     x_array = []
     y_array = []
     for xy in points:
@@ -30,30 +60,22 @@ def create_xy_arrays(points):
     return x_array, y_array
 
 
-def create_lane_polynomials(row):
-    left_lane_data, center_lane_data, right_lane_data = get_points_of_all_3_lanes(row)
-    if left_lane_data:
-        x_array, y_array = create_xy_arrays(left_lane_data)
-        left_poly_pred = np.polynomial.polynomial.polyfit(x_array, y_array, 1)
-    else:
-        left_lane_data = None
-
-    if center_lane_data:
-        x_array, y_array = create_xy_arrays(center_lane_data)
-        center_poly_pred = np.polynomial.polynomial.polyfit(x_array, y_array, 1)
-    else:
-        center_lane_data = None
-
-    if right_lane_data:
-        x_array, y_array = create_xy_arrays(right_lane_data)
-        right_poly_pred = np.polynomial.polynomial.polyfit(x_array, y_array, 1)
-    else:
-        right_lane_data = None
-
-    return left_poly_pred, center_poly_pred, right_poly_pred
-
-
 def plot_lanes(row):
+    """
+    Plot lane annotation points for a single sample using Plotly.
+
+    Creates a scatter plot containing the lane point sets (left/center/right) as
+    separate traces. The y-axis is reversed to match the OpenCV image coordinate
+    system (origin at top-left).
+
+    Args:
+        row:
+            A pandas Series or dict-like row containing lane label fields.
+
+    Returns:
+        plotly.graph_objects.Figure:
+            Plotly figure containing the lane point scatter traces.
+    """
     left_lane_data, center_lane_data, right_lane_data = get_points_of_all_3_lanes(row)
     fig = go.Figure()
     if left_lane_data:
@@ -101,7 +123,6 @@ if __name__ == "__main__":
     sample_data = data.sample(n=1)
 
     for index, row in sample_data.iterrows():
-        print(create_lane_polynomials(row))
         left_lane_data, center_lane_data, right_lane_data = get_points_of_all_3_lanes(
             row
         )
