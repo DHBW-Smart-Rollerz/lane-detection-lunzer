@@ -9,14 +9,14 @@ git ffmpeg libsm6 libxext6 \
 
 RUN python -m pip install --upgrade pip
 
-RUN pip install --no-cache-dir \
+RUN pip install \
     --index-url https://download.pytorch.org/whl/cu128 \
     torch torchvision torchaudio
 
 RUN pip install --no-cache-dir \
     opencv-python-headless onnx onnxruntime numpy scipy matplotlib \
     albumentations tqdm pyyaml rich hydra-core jupyter ipykernel \
-    pandas fastapi uvicorn plotly
+    pandas fastapi uvicorn plotly pre-commit
 
 # Arbeitsverzeichnis für deinen Quellcode festlegen
 WORKDIR /workspace

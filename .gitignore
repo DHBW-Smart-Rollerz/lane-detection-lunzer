@@ -208,3 +208,4 @@ __marimo__/
 
 #Image and Training Data
 data/*
+*.xlsx
