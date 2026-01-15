@@ -13,7 +13,7 @@ from typing import Iterable, Tuple
 
 import cv2
 import numpy as np
-from load_data import get_current_data
+from .load_data import get_current_data
 
 
 def send_frame_to_server(vis_bgr, url="http://localhost:8000/push", quality=90):

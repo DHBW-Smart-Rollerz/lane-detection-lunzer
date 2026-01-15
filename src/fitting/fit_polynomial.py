@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Iterable, List, Optional, Tuple
 
 import numpy as np
+from numpy.polynomial import Polynomial
 
 Point = Tuple[float, float]
 
@@ -59,13 +60,13 @@ def fit_poly_x_of_y(
     if np.isclose(np.std(y), 0.0):
         return None
 
-    coeffs = np.polyfit(y, x, deg=degree)  # x = f(y)
-    x_hat = np.polyval(coeffs, y)
+    polynom = np.polynomial.polynomial.Polynomial.fit(y, x, deg=degree)  # x = f(y)
+    x_hat = polynom(y)
     rmse = float(np.sqrt(np.mean((x_hat - x) ** 2)))
 
     return PolyFitXY(
         degree=degree,
-        coeffs=coeffs,
+        polynom=polynom,
         y_min=float(np.min(y)),
         y_max=float(np.max(y)),
         n_points=int(x.size),
@@ -91,7 +92,3 @@ def sample_poly_x_of_y(
     ys = np.linspace(ymin, ymax, num=num, dtype=float)
     xs = np.polyval(fit.coeffs, ys)
     return xs, ys
-
-
-if __name__ == "__main__":
-    print("test")
