@@ -13,6 +13,7 @@ from typing import Iterable, Tuple
 
 import cv2
 import numpy as np
+
 from .load_data import get_current_data
 
 
