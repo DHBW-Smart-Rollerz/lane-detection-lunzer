@@ -9,7 +9,7 @@ git ffmpeg libsm6 libxext6 \
 
 RUN python -m pip install --upgrade pip
 
-RUN pip install \
+RUN pip install --no-cache-dir\
     --index-url https://download.pytorch.org/whl/cu128 \
     torch torchvision torchaudio
 

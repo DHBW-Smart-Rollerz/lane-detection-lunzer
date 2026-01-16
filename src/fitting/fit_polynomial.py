@@ -12,7 +12,7 @@ class PolyFitXY:
     """Polynomial fit for x as a function of y (x = f(y))."""
 
     degree: int
-    coeffs: np.ndarray  # np.polyfit coeffs, highest power first
+    poly: Polynomial  # NumPy Polynomial object
     y_min: float
     y_max: float
     n_points: int
@@ -60,13 +60,13 @@ def fit_poly_x_of_y(
     if np.isclose(np.std(y), 0.0):
         return None
 
-    polynom = np.polynomial.polynomial.Polynomial.fit(y, x, deg=degree)  # x = f(y)
-    x_hat = polynom(y)
+    poly = Polynomial.fit(y, x, deg=degree)  # x = f(y)
+    x_hat = poly(y)
     rmse = float(np.sqrt(np.mean((x_hat - x) ** 2)))
 
     return PolyFitXY(
         degree=degree,
-        polynom=polynom,
+        poly=poly,
         y_min=float(np.min(y)),
         y_max=float(np.max(y)),
         n_points=int(x.size),
