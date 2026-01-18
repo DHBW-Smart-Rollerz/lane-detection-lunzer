@@ -1,10 +1,6 @@
 from fitting.load_data import get_current_data
 from fitting.plot_label import plot_lanes
-from fitting.visualize_original_label import (
-    draw_lanes,
-    load_image,
-    send_frame_to_server,
-)
+from fitting.visualize import draw_lanes, load_image, send_frame_to_server
 
 if __name__ == "__main__":
     data = get_current_data()
