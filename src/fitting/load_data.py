@@ -253,9 +253,3 @@ def get_current_data():
     data = DataParser(task_names_to_load, jobs_to_ommit).cleaned_dataframe
 
     return data
-
-
-if __name__ == "__main__":
-    data = get_current_data()
-    data.to_excel("excel.xlsx")
-    print(data)

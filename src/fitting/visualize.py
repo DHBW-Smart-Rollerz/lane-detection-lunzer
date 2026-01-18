@@ -14,6 +14,7 @@ from typing import Iterable, Tuple
 import cv2
 import numpy as np
 
+from .common_helpers import split_point_string_to_points
 from .load_data import get_current_data
 
 
@@ -72,33 +73,6 @@ def load_image(path):
     return img
 
 
-def split_point_string_to_points(string):
-    """
-    Parse a CVAT polyline point string into a list of (x, y) coordinates.
-
-    The expected format is a sequence of comma-separated coordinate pairs,
-    e.g. "x1,y1 x2,y2 ...". Floating-point and negative values are supported.
-
-    Args:
-        string (str):
-            Polyline point string as stored in the annotation file.
-
-    Returns:
-        list[tuple[float, float]]:
-            List of (x, y) coordinate pairs. Returns an empty list if the
-            input is invalid or empty.
-    """
-    _point_re = re.compile(r"(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)")
-
-    if not string or not isinstance(string, str):
-        return []
-
-    pts = _point_re.findall(
-        string
-    )  # Liste von Strings: [('x1','y1'), ('x2','y2'), ...]
-    return [(float(x), float(y)) for x, y in pts]
-
-
 def draw_points(
     img: np.ndarray,
     points: Iterable[Tuple[float, float]],
@@ -151,19 +125,21 @@ def draw_points(
     h, w = img.shape[:2]
     last_xi = None
     last_yi = None
+
     for xy in points:
         if xy is None or len(xy) != 2:
             continue
         x, y = float(xy[0]), float(xy[1])
         xi, yi = int(round(x)), int(round(y))
 
-        if clip:
-            if xi < 0 or yi < 0 or xi > w or yi > h:
-                continue
-        # Anti-aliased Kreis (AA wirkt v.a. bei dünnen Linien)
+        if clip and (xi < 0 or yi < 0 or xi >= w or yi >= h):
+            continue
+
         cv2.circle(img, (xi, yi), radius, bgr, thickness, lineType=cv2.LINE_AA)
-        if last_xi and last_yi != None:
+
+        if last_xi is not None and last_yi is not None:
             cv2.line(img, (last_xi, last_yi), (xi, yi), bgr, 2, lineType=cv2.LINE_AA)
+
         last_xi = xi
         last_yi = yi
 
@@ -198,6 +174,43 @@ def draw_lanes(img, data_row):
     img = draw_points(img, left_lane_data, "red")
     img = draw_points(img, center_lane_data, "green")
     img = draw_points(img, right_lane_data, "blue")
+    return img
+
+
+def draw_poly_curve(img, xs, ys, color=(0, 255, 255), thickness=2, clip=True):
+    """
+    Draw a polynomial curve defined by sampled (x, y) points onto an image.
+
+    Consecutive points are connected using anti-aliased line segments.
+    Optionally, points outside the image bounds are discarded.
+
+    Args:
+        img:
+            OpenCV image (BGR) onto which the curve is drawn.
+        xs:
+            Iterable of x-coordinates (pixel space).
+        ys:
+            Iterable of y-coordinates (pixel space).
+        color:
+            BGR color tuple used for drawing the curve.
+        thickness:
+            Line thickness in pixels.
+        clip:
+            If True, points outside the image boundaries are ignored.
+
+    Returns:
+        np.ndarray:
+            The input image with the polynomial curve drawn on top.
+    """
+    h, w = img.shape[:2]
+    pts = []
+    for x, y in zip(xs, ys):
+        xi, yi = int(round(float(x))), int(round(float(y)))
+        if clip and (xi < 0 or yi < 0 or xi >= w or yi >= h):
+            continue
+        pts.append((xi, yi))
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        cv2.line(img, (x0, y0), (x1, y1), color, thickness, lineType=cv2.LINE_AA)
     return img
 
 

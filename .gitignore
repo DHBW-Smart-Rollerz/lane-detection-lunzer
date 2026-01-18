@@ -208,4 +208,5 @@ __marimo__/
 
 #Image and Training Data
 data/*
+artifacts/*
 *.xlsx
