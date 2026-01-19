@@ -4,7 +4,7 @@ from typing import Iterable, List, Optional, Tuple
 import numpy as np
 from numpy.polynomial import Polynomial
 
-from .common_helpers import to_xy_arrays
+from .common_helpers import densify_polyline, to_xy_arrays
 
 Point = Tuple[float, float]
 

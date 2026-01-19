@@ -1,3 +1,4 @@
+import math
 import re
 from typing import Iterable, List, Tuple
 
@@ -176,3 +177,110 @@ def get_points_of_all_3_lanes(data_row):
     center_lane_data = split_point_string_to_points(data_row["center lane"])
     right_lane_data = split_point_string_to_points(data_row["right lane"])
     return left_lane_data, center_lane_data, right_lane_data
+
+
+def densify_polyline(
+    points: Iterable[Point],
+    *,
+    step_px: float = 10.0,
+    dedup_eps: float = 1e-6,
+    include_last: bool = True,
+) -> List[Point]:
+    """
+    Linearly densify a polyline by inserting points along each segment.
+
+    The function walks through consecutive point pairs and inserts additional
+    points so that the distance between neighboring samples is roughly `step_px`
+    (measured in Euclidean pixel distance). This is a pure geometric densification
+    (no smoothing).
+
+    Invalid points (None, wrong length, None coords, non-finite) are skipped.
+
+    Args:
+        points:
+            Iterable of (x, y) points describing the polyline in order.
+        step_px:
+            Desired spacing between consecutive output points in pixels.
+            Must be > 0. Typical values: 5..20 depending on your label density.
+        dedup_eps:
+            Distance threshold for de-duplicating consecutive points.
+            If the next candidate is within `dedup_eps` of the last output point,
+            it is skipped.
+        include_last:
+            If True, ensures the last valid input point is included in the output.
+
+    Returns:
+        List[Point]:
+            Densified list of (x, y) points in the original order.
+
+    Raises:
+        ValueError:
+            If `step_px` is not > 0.
+    """
+    if step_px <= 0:
+        raise ValueError("step_px must be > 0")
+
+    # --- sanitize input (keep order)
+    clean: List[Point] = []
+    for p in points:
+        if p is None or len(p) != 2:
+            continue
+        x, y = p
+        if x is None or y is None:
+            continue
+        x_f = float(x)
+        y_f = float(y)
+        if not (math.isfinite(x_f) and math.isfinite(y_f)):
+            continue
+        clean.append((x_f, y_f))
+
+    if not clean:
+        return []
+
+    out: List[Point] = [clean[0]]
+
+    def _is_dup(a: Point, b: Point) -> bool:
+        dx = a[0] - b[0]
+        dy = a[1] - b[1]
+        return (dx * dx + dy * dy) <= (dedup_eps * dedup_eps)
+
+    for (x0, y0), (x1, y1) in zip(clean, clean[1:]):
+        dx = x1 - x0
+        dy = y1 - y0
+        seg_len = math.hypot(dx, dy)
+
+        # Skip zero-length segments
+        if seg_len <= dedup_eps:
+            if not _is_dup(out[-1], (x1, y1)):
+                out.append((x1, y1))
+            continue
+
+        # Number of sub-steps to keep spacing <= step_px
+        n_steps = int(math.floor(seg_len / step_px))
+
+        # Insert intermediate points (exclude start, exclude end)
+        # t in (0, 1)
+        for k in range(1, n_steps + 1):
+            t = (k * step_px) / seg_len
+            if t >= 1.0:
+                break
+            xi = x0 + t * dx
+            yi = y0 + t * dy
+            cand = (xi, yi)
+            if not _is_dup(out[-1], cand):
+                out.append(cand)
+
+        # Append end point (or skip if not desired)
+        if include_last:
+            if not _is_dup(out[-1], (x1, y1)):
+                out.append((x1, y1))
+        else:
+            # If we don't include last, still keep continuity by de-duping
+            if not _is_dup(out[-1], (x1, y1)):
+                out.append((x1, y1))
+
+    # If include_last, ensure final valid input point is present
+    if include_last and not _is_dup(out[-1], clean[-1]):
+        out.append(clean[-1])
+
+    return out
