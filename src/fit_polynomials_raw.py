@@ -147,23 +147,33 @@ def main() -> None:
                     "coef_c2": float("nan"),
                     "coef_c3": float("nan"),
                     "coef_c4": float("nan"),
-                    "rmse_x_px": float("nan"),
-                    "mae_x_px": float("nan"),
-                    "medae_x_px": float("nan"),
-                    "maxae_x_px": float("nan"),
+                    # errors computed on the points used for fitting (raw or densified)
+                    "rmse_x_px_used": float("nan"),
+                    "mae_x_px_used": float("nan"),
+                    "medae_x_px_used": float("nan"),
+                    "maxae_x_px_used": float("nan"),
+                    # errors computed only on original ground-truth points (always raw)
+                    "rmse_x_px_gt": float("nan"),
+                    "mae_x_px_gt": float("nan"),
+                    "medae_x_px_gt": float("nan"),
+                    "maxae_x_px_gt": float("nan"),
                 }
 
                 if fit is not None:
-                    # --- coefficients (ascending order: c0..cn) ---
                     for i in range(min(len(fit.poly_std_coeffs), 5)):
                         rec[f"coef_c{i}"] = float(fit.poly_std_coeffs[i])
 
-                    # --- error metrics on the points actually used for fitting ---
-                    err = x_errors_x_of_y(pts_used, fit.poly)
-                    rec["rmse_x_px"] = rmse_from_errors(err)
-                    rec["mae_x_px"] = mae_from_errors(err)
-                    rec["medae_x_px"] = medae_from_errors(err)
-                    rec["maxae_x_px"] = maxae_from_errors(err)
+                    err_used = x_errors_x_of_y(pts_used, fit.poly)
+                    rec["rmse_x_px_used"] = rmse_from_errors(err_used)
+                    rec["mae_x_px_used"] = mae_from_errors(err_used)
+                    rec["medae_x_px_used"] = medae_from_errors(err_used)
+                    rec["maxae_x_px_used"] = maxae_from_errors(err_used)
+
+                    err_gt = x_errors_x_of_y(pts_raw, fit.poly)
+                    rec["rmse_x_px_gt"] = rmse_from_errors(err_gt)
+                    rec["mae_x_px_gt"] = mae_from_errors(err_gt)
+                    rec["medae_x_px_gt"] = medae_from_errors(err_gt)
+                    rec["maxae_x_px_gt"] = maxae_from_errors(err_gt)
 
                 results.append(rec)
 
