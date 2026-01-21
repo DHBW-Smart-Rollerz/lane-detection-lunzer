@@ -193,5 +193,5 @@ if __name__ == "__main__":
     main()
 
 # Beispiel Nutzung:
-# python src/fit_polynomials_raw.py
-# python src/fit_polynomials_raw.py --densify-step-px 10
+# python src/fit_polynomials.py
+# python src/fit_polynomials.py --densify-step-px 10

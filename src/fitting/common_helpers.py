@@ -2,6 +2,7 @@ import math
 import re
 from typing import Iterable, List, Tuple
 
+import cv2
 import numpy as np
 from numpy.polynomial import Polynomial
 
@@ -284,3 +285,44 @@ def densify_polyline(
         out.append(clean[-1])
 
     return out
+
+
+def stitch_side_by_side(
+    left: np.ndarray,
+    right: np.ndarray,
+    *,
+    gap: int = 16,
+    pad_color: tuple[int, int, int] = (30, 30, 30),
+) -> np.ndarray:
+    """
+    Stitch two images horizontally with a small gap.
+
+    If heights differ, images are padded (bottom) to the max height.
+
+    Args:
+        left: Left BGR image.
+        right: Right BGR image.
+        gap: Gap between images in pixels.
+        pad_color: BGR color for padding area.
+
+    Returns:
+        Stitched BGR image.
+    """
+    h1, w1 = left.shape[:2]
+    h2, w2 = right.shape[:2]
+    h = max(h1, h2)
+
+    def _pad_to_h(img: np.ndarray, target_h: int) -> np.ndarray:
+        ih, iw = img.shape[:2]
+        if ih == target_h:
+            return img
+        pad = target_h - ih
+        return cv2.copyMakeBorder(
+            img, 0, pad, 0, 0, borderType=cv2.BORDER_CONSTANT, value=pad_color
+        )
+
+    left_p = _pad_to_h(left, h)
+    right_p = _pad_to_h(right, h)
+
+    spacer = np.full((h, gap, 3), pad_color, dtype=np.uint8)
+    return cv2.hconcat([left_p, spacer, right_p])
