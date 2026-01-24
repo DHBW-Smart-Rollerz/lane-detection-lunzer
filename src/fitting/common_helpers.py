@@ -74,7 +74,7 @@ def poly_from_result_row(row):
     """
     Reconstruct a polynomial x = f(y) from stored CSV coefficients.
 
-    The function reads coefficient columns (coef_c0 .. coef_c4) from a
+    The function reads coefficient columns (coef_c0 .. coef_c6) from a
     result row and builds a NumPy Polynomial in standard power basis.
     NaN coefficients are ignored, allowing reconstruction of lower-degree
     polynomials from a fixed-width schema.
@@ -82,7 +82,7 @@ def poly_from_result_row(row):
     Args:
         row:
             A pandas Series or dict-like object containing polynomial
-            coefficients under the keys 'coef_c0' .. 'coef_c4'.
+            coefficients under the keys 'coef_c0' .. 'coef_c6'.
 
     Returns:
         numpy.polynomial.Polynomial:
@@ -94,6 +94,8 @@ def poly_from_result_row(row):
         row["coef_c2"],
         row["coef_c3"],
         row["coef_c4"],
+        row["coef_c5"],
+        row["coef_c6"],
     ]
     coef = [
         c for c in coef if not (c is None or (isinstance(c, float) and np.isnan(c)))

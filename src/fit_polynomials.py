@@ -94,7 +94,7 @@ def main() -> None:
         "--degrees",
         type=int,
         nargs="+",
-        default=[2, 3, 4],
+        default=[2, 3, 4, 5, 6],
         help="Polynomial degrees to fit (default: 2 3 4).",
     )
     args = p.parse_args()
@@ -147,6 +147,8 @@ def main() -> None:
                     "coef_c2": float("nan"),
                     "coef_c3": float("nan"),
                     "coef_c4": float("nan"),
+                    "coef_c5": float("nan"),
+                    "coef_c6": float("nan"),
                     # errors computed on the points used for fitting (raw or densified)
                     "rmse_x_px_used": float("nan"),
                     "mae_x_px_used": float("nan"),
@@ -160,7 +162,7 @@ def main() -> None:
                 }
 
                 if fit is not None:
-                    for i in range(min(len(fit.poly_std_coeffs), 5)):
+                    for i in range(min(len(fit.poly_std_coeffs), 7)):
                         rec[f"coef_c{i}"] = float(fit.poly_std_coeffs[i])
 
                     err_used = x_errors_x_of_y(pts_used, fit.poly)

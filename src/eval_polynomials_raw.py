@@ -17,7 +17,7 @@ import numpy as np
 import pandas as pd
 
 LANE_ORDER = ["left", "center", "right"]
-DEGREES_DEFAULT = [2, 3, 4]
+DEGREES_DEFAULT = [2, 3, 4, 5, 6]
 GROUP_KEYS = ["task_name", "image_id", "image_path", "method", "variant", "degree"]
 
 
@@ -273,7 +273,7 @@ def summarize_errors_image_level(
 
     Args:
         df: Results DataFrame (must contain is_full_image).
-        metric: Metric column to aggregate (e.g. "rmse_x_px").
+        metric: Metric column to aggregate (e.g. "rmse_x_px_gt").
         only_full: If True, use only fully fitted images.
 
     Returns:
@@ -493,12 +493,12 @@ def plot_rmse_boxplot(df: pd.DataFrame, out_path: Path, *, only_full: bool) -> N
     if only_full:
         r = r[r["is_full_image"] == True]  # noqa: E712
     r = r[(r["lane_present"] == True) & (r["fit_success"] == True)]  # noqa: E712
-    r = r[np.isfinite(r["rmse_x_px"])]
+    r = r[np.isfinite(r["rmse_x_px_gt"])]
 
     data: List[np.ndarray] = []
     labels: List[str] = []
     for deg in sorted(r["degree"].dropna().unique()):
-        vals = r.loc[r["degree"] == deg, "rmse_x_px"].to_numpy(float)
+        vals = r.loc[r["degree"] == deg, "rmse_x_px_gt"].to_numpy(float)
         vals = vals[np.isfinite(vals)]
         if vals.size == 0:
             continue
@@ -509,7 +509,7 @@ def plot_rmse_boxplot(df: pd.DataFrame, out_path: Path, *, only_full: bool) -> N
     ax = fig.add_subplot(111)
     ax.boxplot(data, labels=labels, showfliers=True)
     ax.set_xlabel("Polynomial degree")
-    ax.set_ylabel("rmse_x_px (px)")
+    ax.set_ylabel("rmse_x_px_gt (px)")
     ax.set_title("RMSE distribution over successful lane fits")
 
     fig.tight_layout()
@@ -531,7 +531,7 @@ def main() -> None:
         nargs="*",
         type=int,
         default=DEGREES_DEFAULT,
-        help="Degrees to include (default: 2 3 4)",
+        help="Degrees to include (default: 2 3 4 5 6)",
     )
     p.add_argument(
         "--only-full",
@@ -546,7 +546,7 @@ def main() -> None:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    metrics = ["rmse_x_px", "mae_x_px", "medae_x_px", "maxae_x_px"]
+    metrics = ["rmse_x_px_gt", "mae_x_px_gt", "medae_x_px_gt", "maxae_x_px_gt"]
 
     df = load_results(args.results, metrics)
     df = df[df["degree"].isin(args.degrees)].copy()
@@ -558,7 +558,9 @@ def main() -> None:
     cov = summarize_coverage_lane_level(df)
     full = summarize_full_image_rate(df)
     lane_stats = summarize_errors_lane_level(df, metrics, only_full=args.only_full)
-    img_stats = summarize_errors_image_level(df, "rmse_x_px", only_full=args.only_full)
+    img_stats = summarize_errors_image_level(
+        df, "rmse_x_px_gt", only_full=args.only_full
+    )
 
     cov.to_csv(out_dir / "summary_coverage_lane_level.csv", index=False)
     full.to_csv(out_dir / "summary_full_image_rate.csv", index=False)
@@ -568,7 +570,7 @@ def main() -> None:
     export_worst_cases(
         df,
         out_dir,
-        metric="rmse_x_px",
+        metric="rmse_x_px_gt",
         degrees=args.degrees,
         only_full=args.only_full,
         top_k=args.topk,
@@ -586,7 +588,7 @@ def main() -> None:
         )
 
     plot_rmse_boxplot(
-        df, out_dir / "fig_rmse_boxplot_vs_degree.png", only_full=args.only_full
+        df, out_dir / "fig_rmse_gt_boxplot_vs_degree.png", only_full=args.only_full
     )
 
     print(f"[eval] wrote outputs to: {out_dir.resolve()}")
@@ -597,5 +599,5 @@ if __name__ == "__main__":
 
 
 # Beispielnutzung:
-# python /workspace/src/eval_polynomials_raw.py --results /workspace/artifacts/results_poly_raw.csv
-# python /workspace/src/eval_polynomials_raw.py --results /workspace/artifacts/results_poly_raw.csv --only-full
+# python /workspace/src/eval_polynomials.py --results /workspace/artifacts/results_poly_raw.csv
+# python /workspace/src/eval_polynomials.py --results /workspace/artifacts/results_poly_raw.csv --only-full

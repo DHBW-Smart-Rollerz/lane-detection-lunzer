@@ -795,7 +795,7 @@ def main():
     p.add_argument(
         "--degree",
         type=int,
-        choices=[2, 3, 4],
+        choices=[2, 3, 4, 5, 6],
         help="Polynomial degree to visualize (required for --stream).",
     )
     p.add_argument(
@@ -854,7 +854,7 @@ def main():
                 out_dir=args.out,
                 n_each=args.n,
                 metric=args.metric,
-                degrees=[args.degree] if args.degree is not None else [2, 3, 4],
+                degrees=[args.degree] if args.degree is not None else [2, 3, 4, 5, 6],
                 only_full=args.only_full,
                 rank_by=args.rank_by,
             )
@@ -878,7 +878,7 @@ def main():
             only_full=args.only_full,
         )
     else:
-        degrees = [args.degree] if args.degree is not None else [2, 3, 4]
+        degrees = [args.degree] if args.degree is not None else [2, 3, 4, 5, 6]
         export_best_worst(
             args.results,
             args.out,
@@ -899,7 +899,7 @@ if __name__ == "__main__":
     #
     #
     # Densified (Ordner wird automatisch artifacts/vis_polynomials/densified/...):
-    # /usr/local/bin/python /workspace/src/vis_polynomials.py --results /workspace/artifacts/results_poly_densified.csv --only-full
+    # /usr/local/bin/python /workspace/src/vis_polynomials.py --results /workspace/artifacts/results_poly_densified_step10p0px.csv --only-full
     #
     # Compare output: (sollte man nur mit only-full verwenden)
     # /usr/local/bin/python /workspace/src/vis_polynomials.py --compare --results-raw artifacts/results_poly_raw.csv --results-dens artifacts/results_poly_densified_step10p0px.csv --rank-by delta --only-full
