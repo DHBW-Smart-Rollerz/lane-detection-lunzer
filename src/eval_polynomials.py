@@ -1,16 +1,26 @@
 """
-Evaluate raw polynomial fitting results.
+Evaluate polynomial fitting results (raw or densified).
 
 This script summarizes fit coverage and error metrics (RMSE/MAE/MedAE/MaxAE)
 for polynomial lane fits across degrees. It exports CSV summaries and saves
 plots as static images for later reporting and comparison.
+
+Key features (updated):
+- Automatically splits outputs into:
+    artifacts/eval_polynomials/raw/...
+    artifacts/eval_polynomials/densified/...
+  (inferred from the results CSV filename)
+- Computes and exports ALL summaries/plots twice:
+    *_gt   : errors against original GT points
+    *_used : errors against the points actually used for fitting (raw==used for raw runs)
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -21,11 +31,25 @@ DEGREES_DEFAULT = [2, 3, 4, 5, 6]
 GROUP_KEYS = ["task_name", "image_id", "image_path", "method", "variant", "degree"]
 
 
+def _infer_variant_from_results_path(results_csv: str) -> str:
+    """
+    Infer evaluation subfolder from results filename.
+
+    Heuristic:
+    - If the filename contains "dens" or "densified" -> "densified"
+    - Else -> "raw"
+    """
+    name = os.path.basename(results_csv).lower()
+    if "dens" in name or "densified" in name:
+        return "densified"
+    return "raw"
+
+
 def _ensure_bool(s: pd.Series) -> pd.Series:
     """
     Convert a Series to boolean in a CSV-friendly way.
 
-    Accepts True/False, 1/0, "true"/"false", "True"/"False".
+    Accepts True/False, 1/0, "true"/"false", "True"/"False", "yes"/"no".
     """
     if s.dtype == bool:
         return s
@@ -39,7 +63,7 @@ def load_results(results_csv: str, metric_cols: Iterable[str]) -> pd.DataFrame:
     Load the results CSV and coerce important columns.
 
     Args:
-        results_csv: Path to CSV produced by fit_polynomials_raw.
+        results_csv: Path to CSV produced by fit_polynomials.
         metric_cols: Metric columns to coerce to numeric.
 
     Returns:
@@ -65,11 +89,8 @@ def is_full_image_group(g: pd.DataFrame) -> bool:
     """
     Check if an image group is 'fully fitted'.
 
-    For each lane record in the group:
-        fit_success must match lane_present.
-    Meaning:
-        - if lane is present -> must have successful fit
-        - if lane is not present -> fit_success should be False (or not counted)
+    Rule:
+      For all lanes where lane_present == True, fit_success must be True.
 
     Args:
         g: DataFrame slice of one image group.
@@ -77,14 +98,9 @@ def is_full_image_group(g: pd.DataFrame) -> bool:
     Returns:
         True if the group is considered fully fitted.
     """
-    # If lane_present is True and fit_success is False => not full.
-    # If lane_present is False, we don't require a fit.
-    # In your pipeline you stored lane_present per lane; we use it directly.
     present = g["lane_present"].to_numpy(bool)
     success = g["fit_success"].to_numpy(bool)
-
-    # All present lanes must be successful
-    return bool((success[present]).all())
+    return bool(success[present].all())
 
 
 def add_full_image_flag(df: pd.DataFrame) -> pd.DataFrame:
@@ -103,7 +119,6 @@ def add_full_image_flag(df: pd.DataFrame) -> pd.DataFrame:
         .apply(lambda g: is_full_image_group(g), include_groups=False)
         .rename(columns={None: "is_full_image"})
     )
-    # groupby.apply produces a Series-like frame depending on pandas version; normalize:
     if "is_full_image" not in flags.columns:
         flags = flags.rename(columns={0: "is_full_image"})
 
@@ -119,9 +134,10 @@ def summarize_coverage_lane_level(df: pd.DataFrame) -> pd.DataFrame:
     Metrics reported:
         - n_total: all lane records
         - n_present: lane_present == True
-        - n_enough_points: lane_present & enough_points
-        - n_fit_success: lane_present & fit_success
-        - rates computed relative to n_present when meaningful
+        - n_present_fail_points: present but not enough points
+        - n_present_fit_fail: present + enough points but fit failed
+        - n_fit_success: present & fit_success
+        - rates computed relative to n_present
 
     Args:
         df: Results DataFrame.
@@ -137,19 +153,23 @@ def summarize_coverage_lane_level(df: pd.DataFrame) -> pd.DataFrame:
             g["enough_points"] == True
         )  # noqa: E712
         success = (g["lane_present"] == True) & (g["fit_success"] == True)  # noqa: E712
+
         n_present = int(present.sum())
         n_enough = int(enough.sum())
         n_success = int(success.sum())
+
         n_present_fail_points = int(
-            ((g["lane_present"] == True) & (g["enough_points"] == False)).sum()
-        )  # noqa: E712
+            (
+                (g["lane_present"] == True) & (g["enough_points"] == False)
+            ).sum()  # noqa: E712
+        )
         n_present_fit_fail = int(
             (
                 (g["lane_present"] == True)
                 & (g["enough_points"] == True)
                 & (g["fit_success"] == False)
-            ).sum()
-        )  # noqa: E712
+            ).sum()  # noqa: E712
+        )
 
         denom = n_present if n_present > 0 else np.nan
         rows.append(
@@ -158,6 +178,7 @@ def summarize_coverage_lane_level(df: pd.DataFrame) -> pd.DataFrame:
                 "lane": str(lane),
                 "n_total": n_total,
                 "n_present": n_present,
+                "n_enough_points": n_enough,
                 "n_present_fail_points": n_present_fail_points,
                 "n_present_fit_fail": n_present_fit_fail,
                 "n_fit_success": n_success,
@@ -171,7 +192,6 @@ def summarize_coverage_lane_level(df: pd.DataFrame) -> pd.DataFrame:
         )
 
     out = pd.DataFrame(rows)
-    # enforce lane ordering for nicer plots/tables
     out["lane"] = pd.Categorical(out["lane"], categories=LANE_ORDER, ordered=True)
     out = out.sort_values(["degree", "lane"]).reset_index(drop=True)
     return out
@@ -187,7 +207,6 @@ def summarize_full_image_rate(df: pd.DataFrame) -> pd.DataFrame:
     Returns:
         DataFrame with counts and rates per degree.
     """
-    # One row per group:
     groups = df.groupby(GROUP_KEYS, as_index=False).agg(
         is_full_image=("is_full_image", "first")
     )
@@ -266,10 +285,10 @@ def summarize_errors_image_level(
     Summarize an error metric at image level.
 
     Per image, we compute:
-        rmse_mean_image = mean(metric over successful lanes in that image)
+        metric_mean_image = mean(metric over successful lanes in that image)
         n_lanes_ok = count(successful lanes)
 
-    Then we summarize rmse_mean_image over images per degree.
+    Then we summarize metric_mean_image over images per degree.
 
     Args:
         df: Results DataFrame (must contain is_full_image).
@@ -283,7 +302,6 @@ def summarize_errors_image_level(
     if only_full:
         r = r[r["is_full_image"] == True]  # noqa: E712
 
-    # only successful lane fits contribute
     r = r[(r["lane_present"] == True) & (r["fit_success"] == True)]  # noqa: E712
     r = r[np.isfinite(r[metric])]
 
@@ -360,11 +378,15 @@ def export_worst_cases(
             continue
         worst = sub.nlargest(top_k, metric)
         cols = ["task_name", "image_id", "image_path", "lane", "degree", metric]
-        # Keep any other useful columns if present
-        for extra in ["n_points_in", "min_required_points"]:
+        for extra in [
+            "n_points_in_raw",
+            "n_points_in_used",
+            "min_required_points",
+            "densify_step_px",
+        ]:
             if extra in worst.columns and extra not in cols:
                 cols.append(extra)
-        worst[cols].to_csv(out_dir / f"worst_cases_deg{deg}.csv", index=False)
+        worst[cols].to_csv(out_dir / f"worst_cases_{metric}_deg{deg}.csv", index=False)
 
 
 def plot_coverage_present_vs_degree(cov: pd.DataFrame, out_path: Path) -> None:
@@ -375,7 +397,6 @@ def plot_coverage_present_vs_degree(cov: pd.DataFrame, out_path: Path) -> None:
         cov: Coverage summary DataFrame.
         out_path: Where to save the figure (PNG).
     """
-    # Aggregate across lanes (weighted by n_present)
     agg = cov.groupby("degree", as_index=False).apply(
         lambda g: pd.Series(
             {
@@ -458,8 +479,7 @@ def plot_metric_stats_by_degree(
         out_path: Where to save the figure.
         metric: Metric name to plot.
     """
-    sub = stats[stats["metric"] == metric].copy()
-    sub = sub.sort_values("degree")
+    sub = stats[stats["metric"] == metric].copy().sort_values("degree")
     degrees = sub["degree"].to_list()
     x = np.arange(len(degrees))
 
@@ -480,37 +500,49 @@ def plot_metric_stats_by_degree(
     plt.close(fig)
 
 
-def plot_rmse_boxplot(df: pd.DataFrame, out_path: Path, *, only_full: bool) -> None:
+def plot_metric_boxplot(
+    df: pd.DataFrame,
+    out_path: Path,
+    metric: str,
+    *,
+    only_full: bool,
+) -> None:
     """
-    Plot RMSE distributions per degree as a boxplot.
+    Plot distributions per degree as a boxplot for a given metric.
 
     Args:
         df: Results DataFrame.
         out_path: Where to save the plot.
+        metric: Metric column name (e.g. rmse_x_px_gt).
         only_full: If True, restrict to fully fitted images.
     """
     r = df.copy()
     if only_full:
         r = r[r["is_full_image"] == True]  # noqa: E712
     r = r[(r["lane_present"] == True) & (r["fit_success"] == True)]  # noqa: E712
-    r = r[np.isfinite(r["rmse_x_px_gt"])]
+    if metric not in r.columns:
+        return
+    r = r[np.isfinite(r[metric])]
 
     data: List[np.ndarray] = []
     labels: List[str] = []
     for deg in sorted(r["degree"].dropna().unique()):
-        vals = r.loc[r["degree"] == deg, "rmse_x_px_gt"].to_numpy(float)
+        vals = r.loc[r["degree"] == deg, metric].to_numpy(float)
         vals = vals[np.isfinite(vals)]
         if vals.size == 0:
             continue
         data.append(vals)
         labels.append(str(int(deg)))
 
+    if not data:
+        return
+
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.boxplot(data, labels=labels, showfliers=True)
     ax.set_xlabel("Polynomial degree")
-    ax.set_ylabel("rmse_x_px_gt (px)")
-    ax.set_title("RMSE distribution over successful lane fits")
+    ax.set_ylabel(f"{metric} (px)")
+    ax.set_title(f"{metric} distribution over successful lane fits")
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=200)
@@ -520,11 +552,13 @@ def plot_rmse_boxplot(df: pd.DataFrame, out_path: Path, *, only_full: bool) -> N
 def main() -> None:
     """Entry point for evaluation of polynomial fitting results."""
     p = argparse.ArgumentParser()
-    p.add_argument("--results", required=True, help="CSV from fit_polynomials_raw")
+    p.add_argument(
+        "--results", required=True, help="CSV from fit_polynomials (raw or densified)"
+    )
     p.add_argument(
         "--out",
-        default="artifacts/eval_polynomials_raw",
-        help="Output directory for plots and summaries",
+        default="artifacts/eval_polynomials",
+        help="Base output directory (variant subfolder will be appended: raw/ or densified/)",
     )
     p.add_argument(
         "--degrees",
@@ -543,53 +577,83 @@ def main() -> None:
     )
     args = p.parse_args()
 
-    out_dir = Path(args.out)
+    variant = _infer_variant_from_results_path(args.results)
+    out_dir = Path(args.out) / variant
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    metrics = ["rmse_x_px_gt", "mae_x_px_gt", "medae_x_px_gt", "maxae_x_px_gt"]
+    # We evaluate BOTH point-sets (gt + used).
+    # These columns must exist in the CSV; for raw runs, *_gt and *_used are typically identical.
+    metric_sets: Dict[str, List[str]] = {
+        "gt": ["rmse_x_px_gt", "mae_x_px_gt", "medae_x_px_gt", "maxae_x_px_gt"],
+        "used": [
+            "rmse_x_px_used",
+            "mae_x_px_used",
+            "medae_x_px_used",
+            "maxae_x_px_used",
+        ],
+    }
 
-    df = load_results(args.results, metrics)
+    # Load once with all metric columns we care about
+    all_metrics = sorted({m for ms in metric_sets.values() for m in ms})
+    df = load_results(args.results, all_metrics)
     df = df[df["degree"].isin(args.degrees)].copy()
 
     # Add image-level completeness flag
     df = add_full_image_flag(df)
 
-    # Summaries
+    # Coverage / full image rate (independent of gt/used)
     cov = summarize_coverage_lane_level(df)
     full = summarize_full_image_rate(df)
-    lane_stats = summarize_errors_lane_level(df, metrics, only_full=args.only_full)
-    img_stats = summarize_errors_image_level(
-        df, "rmse_x_px_gt", only_full=args.only_full
-    )
 
     cov.to_csv(out_dir / "summary_coverage_lane_level.csv", index=False)
     full.to_csv(out_dir / "summary_full_image_rate.csv", index=False)
-    lane_stats.to_csv(out_dir / "summary_errors_lane_level.csv", index=False)
-    img_stats.to_csv(out_dir / "summary_errors_image_level_rmse.csv", index=False)
 
-    export_worst_cases(
-        df,
-        out_dir,
-        metric="rmse_x_px_gt",
-        degrees=args.degrees,
-        only_full=args.only_full,
-        top_k=args.topk,
-    )
-
-    # Plots
     plot_coverage_present_vs_degree(
         cov, out_dir / "fig_coverage_rates_present_vs_degree.png"
     )
     plot_full_image_rate(full, out_dir / "fig_full_image_rate_vs_degree.png")
 
-    for m in metrics:
-        plot_metric_stats_by_degree(
-            lane_stats, out_dir / f"fig_{m}_stats_vs_degree.png", metric=m
+    # Now do EVERYTHING twice: gt + used
+    for tag, metrics in metric_sets.items():
+        # Skip set if none of its columns exist (helps during transition)
+        existing = [m for m in metrics if m in df.columns]
+        if not existing:
+            print(f"[eval] warning: no '{tag}' metric columns found, skipping.")
+            continue
+
+        lane_stats = summarize_errors_lane_level(df, existing, only_full=args.only_full)
+        lane_stats.to_csv(out_dir / f"summary_errors_lane_level_{tag}.csv", index=False)
+
+        # image-level stats for RMSE only (per your previous approach)
+        rmse_col = f"rmse_x_px_{tag}"
+        img_stats = summarize_errors_image_level(df, rmse_col, only_full=args.only_full)
+        img_stats.to_csv(
+            out_dir / f"summary_errors_image_level_rmse_{tag}.csv", index=False
         )
 
-    plot_rmse_boxplot(
-        df, out_dir / "fig_rmse_gt_boxplot_vs_degree.png", only_full=args.only_full
-    )
+        # worst-cases by degree (lane-level)
+        export_worst_cases(
+            df,
+            out_dir,
+            metric=rmse_col,
+            degrees=args.degrees,
+            only_full=args.only_full,
+            top_k=args.topk,
+        )
+
+        # Plots for each metric stats line-plot
+        for m in existing:
+            plot_metric_stats_by_degree(
+                lane_stats, out_dir / f"fig_{m}_stats_vs_degree.png", metric=m
+            )
+
+        # Boxplot for RMSE distribution
+        plot_metric_boxplot(
+            df,
+            out_dir / f"fig_{rmse_col}_boxplot_vs_degree.png",
+            metric=rmse_col,
+            only_full=args.only_full,
+        )
 
     print(f"[eval] wrote outputs to: {out_dir.resolve()}")
 
@@ -600,4 +664,5 @@ if __name__ == "__main__":
 
 # Beispielnutzung:
 # python /workspace/src/eval_polynomials.py --results /workspace/artifacts/results_poly_raw.csv
+# python /workspace/src/eval_polynomials.py --results /workspace/artifacts/results_poly_densified_step2p0px
 # python /workspace/src/eval_polynomials.py --results /workspace/artifacts/results_poly_raw.csv --only-full
