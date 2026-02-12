@@ -584,8 +584,8 @@ def main():
         "--ctrl-list",
         type=int,
         nargs="+",
-        default=[3, 4, 5, 6],
-        help="Control point counts to export (default: 3 4 5 6).",
+        default=[3, 4, 5, 6, 7, 8, 9, 10],
+        help="Control point counts to export (default: 3 4 5 6 7 8 9 10).",
     )
     p.add_argument(
         "--only-full",

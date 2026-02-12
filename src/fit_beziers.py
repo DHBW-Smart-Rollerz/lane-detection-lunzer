@@ -351,4 +351,4 @@ if __name__ == "__main__":
 # python src/fit_beziers.py --densify-step-px 2
 #
 # All
-# python src/fit_beziers.py --densify-step-px 10 --n-control-points 3 4 5 6
+# python src/fit_beziers.py --densify-step-px 10 --n-control-points 3 4 5 6 7 8 9 10

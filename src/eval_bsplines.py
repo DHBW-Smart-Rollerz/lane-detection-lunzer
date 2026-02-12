@@ -1,16 +1,18 @@
 """
-Evaluate Bezier fitting results (raw or densified).
+Evaluate B-spline fitting results (raw or densified).
 
-This script summarizes fit coverage and error metrics (RMSE/MAE/MedAE/MaxAE)
-for Bezier lane fits across different numbers of control points.
+This script mirrors `eval_beziers.py`, but for B-spline lane fits.
+
+It summarizes fit coverage and error metrics (RMSE/MAE/MedAE/MaxAE)
+across different numbers of control points.
 
 It exports CSV summaries and saves plots as static images for later reporting
 and comparison.
 
 Key features:
 - Automatically splits outputs into:
-    artifacts/eval_beziers/raw/...
-    artifacts/eval_beziers/densified/...
+    artifacts/eval_bsplines/raw/...
+    artifacts/eval_bsplines/densified/...
   (inferred from the results CSV filename)
 - Computes and exports ALL summaries/plots twice:
     *_gt   : errors against original GT points
@@ -74,7 +76,7 @@ def load_results(results_csv: str, metric_cols: Iterable[str]) -> pd.DataFrame:
     Load the results CSV and coerce important columns.
 
     Args:
-        results_csv: Path to CSV produced by fit_beziers.py
+        results_csv: Path to CSV produced by fit_bsplines.py
         metric_cols: Metric columns to coerce to numeric.
 
     Returns:
@@ -94,6 +96,10 @@ def load_results(results_csv: str, metric_cols: Iterable[str]) -> pd.DataFrame:
     for c in metric_cols:
         if c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
+
+    # degree is not required for evaluation, but it is useful for filtering/debugging
+    if "degree" in df.columns:
+        df["degree"] = pd.to_numeric(df["degree"], errors="coerce").astype("Int64")
 
     return df
 
@@ -371,6 +377,7 @@ def export_worst_cases(
             metric,
         ]
         for extra in [
+            "degree",
             "n_points_in_raw",
             "n_points_in_used",
             "min_required_points",
@@ -419,7 +426,7 @@ def plot_coverage_present_vs_ctrlpts(cov: pd.DataFrame, out_path: Path) -> None:
 
     ax.set_xticks(x, [str(int(m)) for m in ctrl])
     ax.set_ylim(0, 1.0)
-    ax.set_xlabel("Bezier control points")
+    ax.set_xlabel("B-spline control points")
     ax.set_ylabel("Rate")
     ax.set_title("Lane-level coverage (rates among present lanes)")
     ax.legend()
@@ -439,7 +446,7 @@ def plot_full_image_rate(full: pd.DataFrame, out_path: Path) -> None:
     ax.bar(x, full["rate_full_images"])
     ax.set_xticks(x, [str(int(m)) for m in ctrl])
     ax.set_ylim(0, 1.0)
-    ax.set_xlabel("Bezier control points")
+    ax.set_xlabel("B-spline control points")
     ax.set_ylabel("Rate")
     ax.set_title("Full image fit rate (all present lanes successfully fitted)")
 
@@ -463,7 +470,7 @@ def plot_metric_stats_by_ctrlpts(
     ax.plot(x, sub["p90"], marker="o", label="p90")
 
     ax.set_xticks(x, [str(int(m)) for m in ctrl])
-    ax.set_xlabel("Bezier control points")
+    ax.set_xlabel("B-spline control points")
     ax.set_ylabel(f"{metric} (px)")
     ax.set_title(f"{metric} statistics over successful lane fits")
     ax.legend()
@@ -505,7 +512,7 @@ def plot_metric_boxplot(
     fig = plt.figure()
     ax = fig.add_subplot(111)
     ax.boxplot(data, labels=labels, showfliers=True)
-    ax.set_xlabel("Bezier control points")
+    ax.set_xlabel("B-spline control points")
     ax.set_ylabel(f"{metric} (px)")
     ax.set_title(f"{metric} distribution over successful lane fits")
 
@@ -518,11 +525,11 @@ def main() -> None:
     """Executes script with parameters."""
     p = argparse.ArgumentParser()
     p.add_argument(
-        "--results", required=True, help="CSV from fit_beziers.py (raw or densified)"
+        "--results", required=True, help="CSV from fit_bsplines.py (raw or densified)"
     )
     p.add_argument(
         "--out",
-        default="artifacts/eval_beziers",
+        default="artifacts/eval_bsplines",
         help="Base output directory (variant subfolder will be appended: raw/ or densified/)",
     )
     p.add_argument(
@@ -530,7 +537,7 @@ def main() -> None:
         nargs="*",
         type=int,
         default=CTRLPTS_DEFAULT,
-        help="Control point counts to include (default: 3 4 5 6 7 8 9 10)",
+        help="Control point counts to include (default: 3 4 5 6)",
     )
     p.add_argument(
         "--only-full",
@@ -625,6 +632,6 @@ if __name__ == "__main__":
 
 
 # Examples:
-# python /workspace/src/eval_beziers.py --results /workspace/artifacts/results_bezier_raw.csv
-# python /workspace/src/eval_beziers.py --results /workspace/artifacts/results_bezier_densified_step10p0px.csv
-# python /workspace/src/eval_beziers.py --results /workspace/artifacts/results_bezier_densified_step10p0px.csv --only-full
+# python /workspace/src/eval_bsplines.py --results /workspace/artifacts/results_bspline_raw.csv
+# python /workspace/src/eval_bsplines.py --results /workspace/artifacts/results_bspline_densified_step10p0px.csv
+# python /workspace/src/eval_bsplines.py --results /workspace/artifacts/results_bspline_densified_step10p0px.csv --only-full
