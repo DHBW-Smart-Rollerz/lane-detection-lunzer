@@ -10,10 +10,10 @@ services:
     tty: true
     volumes:
       - ..:/workspace
-    #deploy:   Auskommentieren wenn GPU nicht vorhanden ist
-      #resources:
-        #reservations:
-          #devices:
-            #+- driver: nvidia
-              #count: 1
-              #capabilities: [gpu]
+    deploy:   #Auskommentieren wenn GPU nicht vorhanden ist
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

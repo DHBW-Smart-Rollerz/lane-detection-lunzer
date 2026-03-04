@@ -1,6 +1,7 @@
 import argparse
 from typing import Any, Dict, List, Optional, Tuple
 
+import numpy as np
 import pandas as pd
 
 from fitting.common_helpers import (
@@ -9,7 +10,9 @@ from fitting.common_helpers import (
     mae_from_errors,
     maxae_from_errors,
     medae_from_errors,
+    point_to_polyline_distances,
     rmse_from_errors,
+    sample_poly_x_of_y,
     x_errors_x_of_y,
 )
 from fitting.fit_polynomial import fit_poly_x_of_y
@@ -97,10 +100,12 @@ def main() -> None:
         default=[2, 3, 4, 5, 6],
         help="Polynomial degrees to fit (default: 2 3 4).",
     )
+    p.add_argument("--curve-samples", type=int, default=400)
     args = p.parse_args()
 
     densify_step_px: Optional[float] = args.densify_step_px
     degrees: List[int] = list(args.degrees)
+    curve_samples = args.curve_samples
 
     data = get_current_data()
     results: List[Dict[str, Any]] = []
@@ -165,13 +170,18 @@ def main() -> None:
                     for i in range(min(len(fit.poly_std_coeffs), 7)):
                         rec[f"coef_c{i}"] = float(fit.poly_std_coeffs[i])
 
-                    err_used = x_errors_x_of_y(pts_used, fit.poly)
+                    xs, ys = sample_poly_x_of_y(
+                        fit.poly, fit.y_min, fit.y_max, n=curve_samples
+                    )
+                    poly_sample = np.stack([xs, ys], axis=1)
+
+                    err_used = point_to_polyline_distances(pts_used, poly_sample)
                     rec["rmse_x_px_used"] = rmse_from_errors(err_used)
                     rec["mae_x_px_used"] = mae_from_errors(err_used)
                     rec["medae_x_px_used"] = medae_from_errors(err_used)
                     rec["maxae_x_px_used"] = maxae_from_errors(err_used)
 
-                    err_gt = x_errors_x_of_y(pts_raw, fit.poly)
+                    err_gt = point_to_polyline_distances(pts_raw, poly_sample)
                     rec["rmse_x_px_gt"] = rmse_from_errors(err_gt)
                     rec["mae_x_px_gt"] = mae_from_errors(err_gt)
                     rec["medae_x_px_gt"] = medae_from_errors(err_gt)

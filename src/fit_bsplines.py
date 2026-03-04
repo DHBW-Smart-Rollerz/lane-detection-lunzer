@@ -44,6 +44,7 @@ from fitting.common_helpers import (
     mae_from_errors,
     maxae_from_errors,
     medae_from_errors,
+    point_to_polyline_distances,
     rmse_from_errors,
 )
 from fitting.load_data import get_current_data
@@ -272,46 +273,6 @@ def fit_bspline_ctrl_points(
 
     ctrl = np.stack([ctrl_x, ctrl_y], axis=1).astype(float)  # (m,2)
     return ctrl, knots
-
-
-# ---------------------------
-# Geometry error: point-to-polyline distance
-# ---------------------------
-
-
-def point_to_polyline_distances(
-    points: List[Point], polyline: np.ndarray
-) -> np.ndarray:
-    """
-    Compute Euclidean distance from each point to the closest segment of a polyline.
-
-    Args:
-        points: list of (x,y)
-        polyline: (M,2) sampled curve points in order
-
-    Returns:
-        distances: (N,) float distances in px
-    """
-    if len(points) == 0 or polyline is None or len(polyline) < 2:
-        return np.asarray([], dtype=float)
-
-    P = np.asarray(points, dtype=float)  # (N,2)
-    A = polyline[:-1]  # (M-1,2)
-    B = polyline[1:]  # (M-1,2)
-    AB = B - A  # (M-1,2)
-    AB2 = np.sum(AB * AB, axis=1)  # (M-1,)
-
-    out = np.empty((P.shape[0],), dtype=float)
-    for k, p in enumerate(P):
-        AP = p - A
-        tt = np.zeros((A.shape[0],), dtype=float)
-        mask = AB2 > 1e-12
-        tt[mask] = np.sum(AP[mask] * AB[mask], axis=1) / AB2[mask]
-        tt = np.clip(tt, 0.0, 1.0)
-        proj = A + (AB * tt[:, None])
-        d2 = np.sum((proj - p) ** 2, axis=1)
-        out[k] = math.sqrt(float(np.min(d2)))
-    return out
 
 
 def build_output_path(densify_step_px: Optional[float]) -> str:

@@ -328,3 +328,38 @@ def stitch_side_by_side(
 
     spacer = np.full((h, gap, 3), pad_color, dtype=np.uint8)
     return cv2.hconcat([left_p, spacer, right_p])
+
+
+def point_to_polyline_distances(
+    points: List[Point], polyline: np.ndarray
+) -> np.ndarray:
+    """
+    Compute Euclidean distance from each point to the closest segment of a polyline.
+
+    Args:
+        points: list of (x,y)
+        polyline: (M,2) sampled curve points in order
+
+    Returns:
+        distances: (N,) float distances in px
+    """
+    if len(points) == 0 or polyline is None or len(polyline) < 2:
+        return np.asarray([], dtype=float)
+
+    P = np.asarray(points, dtype=float)  # (N,2)
+    A = polyline[:-1]  # (M-1,2)
+    B = polyline[1:]  # (M-1,2)
+    AB = B - A  # (M-1,2)
+    AB2 = np.sum(AB * AB, axis=1)  # (M-1,)
+
+    out = np.empty((P.shape[0],), dtype=float)
+    for k, p in enumerate(P):
+        AP = p - A
+        t = np.zeros((A.shape[0],), dtype=float)
+        mask = AB2 > 1e-12
+        t[mask] = np.sum(AP[mask] * AB[mask], axis=1) / AB2[mask]
+        t = np.clip(t, 0.0, 1.0)
+        proj = A + (AB * t[:, None])
+        d2 = np.sum((proj - p) ** 2, axis=1)
+        out[k] = math.sqrt(float(np.min(d2)))
+    return out
