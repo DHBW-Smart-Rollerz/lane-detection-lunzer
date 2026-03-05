@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import List
 
@@ -221,6 +223,21 @@ def main() -> None:
     ap.add_argument(
         "--every", type=int, default=1, help="process every Nth frame (speedup)"
     )
+    ap.add_argument(
+        "--encode",
+        choices=["opencv", "ffmpeg"],
+        default="ffmpeg",
+        help="opencv: write mp4 via OpenCV (less compatible). ffmpeg: write temp AVI and transcode to H.264 yuv420p (recommended).",
+    )
+    ap.add_argument(
+        "--crf",
+        type=int,
+        default=23,
+        help="H.264 quality for ffmpeg (lower=better, larger=file).",
+    )
+    ap.add_argument(
+        "--preset", default="fast", help="ffmpeg x264 preset (ultrafast..veryslow)."
+    )
 
     args = ap.parse_args()
 
@@ -248,12 +265,25 @@ def main() -> None:
 
     writer = None
 
+    tmp_avi_path = None  # will be used if args.encode == "ffmpeg"
+
     def ensure_writer(w: int, h: int) -> cv2.VideoWriter:
-        nonlocal writer
+        nonlocal writer, tmp_avi_path
+
         if writer is not None:
             return writer
-        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        writer = cv2.VideoWriter(str(out_path), fourcc, float(args.fps), (w, h))
+
+        if args.encode == "opencv":
+            # This often creates mp4v (MPEG-4 Part 2) -> not always NAS/browser friendly
+            fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+            writer = cv2.VideoWriter(str(out_path), fourcc, float(args.fps), (w, h))
+        else:
+            # Write a temp AVI with MJPG (very robust), then transcode via ffmpeg at the end.
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_avi_path = str(out_path.with_suffix(".tmp.avi"))
+            fourcc = cv2.VideoWriter_fourcc(*"MJPG")
+            writer = cv2.VideoWriter(tmp_avi_path, fourcc, float(args.fps), (w, h))
+
         if not writer.isOpened():
             raise RuntimeError(f"Could not open VideoWriter for: {out_path}")
         return writer
@@ -408,6 +438,38 @@ def main() -> None:
     if writer is not None:
         writer.release()
 
+    # If requested: transcode to H.264 (MP4) for maximum compatibility (Synology/Browser)
+    if args.encode == "ffmpeg":
+        if not tmp_avi_path or not os.path.exists(tmp_avi_path):
+            raise RuntimeError("Temporary AVI was not created; cannot transcode.")
+
+        # ffmpeg -> H.264 + yuv420p + faststart
+        cmd = [
+            "ffmpeg",
+            "-y",
+            "-i",
+            tmp_avi_path,
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-crf",
+            str(int(args.crf)),
+            "-preset",
+            str(args.preset),
+            "-movflags",
+            "+faststart",
+            str(out_path),
+        ]
+        print("[ffmpeg] " + " ".join(cmd))
+        subprocess.run(cmd, check=True)
+
+        # cleanup temp
+        try:
+            os.remove(tmp_avi_path)
+        except Exception:
+            pass
+
     print(
         f"[done] wrote video: {out_path}  frames={frame_count if args.frames else 'see logs'}"
     )
@@ -421,7 +483,7 @@ if __name__ == "__main__":
 VERWENDUNG:
 Aus Frame-Ordner:
 
-python src/infer_video_nn.py \
+python src/infer_export_video_nn.py \
   --ckpt artifacts/train_bspline_m4/best.pt \
   --method bspline \
   --frames /path/to/exported_frames \
@@ -429,15 +491,17 @@ python src/infer_video_nn.py \
   --fps 20 \
   --exist-thr 0.5 \
   --draw-ctrl
+  --encode ffmpeg
 
 Aus video Datei:
 
-python src/infer_video_nn.py \
+python src/infer_export_video_nn.py \
   --ckpt artifacts/train_bspline_m4/best.pt \
   --method bspline \
   --video /path/to/input.mp4 \
   --out artifacts/demo/bspline_m4_demo.mp4 \
   --fps 20 \
   --exist-thr 0.5
+  --encode ffmpeg
 
 """
