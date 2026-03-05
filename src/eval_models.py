@@ -183,7 +183,6 @@ def plot_grouped_rmse(summary: pd.DataFrame, out_path: Path) -> None:
     ax = fig.add_subplot(111)
 
     models = summary["model"].tolist()
-    models_pretty = list(map(_pretty_name, models))
     mean = summary["rmse_sym_mean_px"].to_numpy(float)
     median = summary["rmse_sym_median_px"].to_numpy(float)
     p90 = (
@@ -191,6 +190,9 @@ def plot_grouped_rmse(summary: pd.DataFrame, out_path: Path) -> None:
         if "rmse_sym_p90_px" in summary.columns
         else summary["rmse_sym_p90_px".lower()].to_numpy(float)
     )
+    models_pretty = [
+        f"{_pretty_name(m)}\nμ={mean[i]:.2f}px" for i, m in enumerate(models)
+    ]
 
     x = np.arange(len(models))
     width = 0.25
@@ -219,13 +221,27 @@ def plot_boxplot_rmse(tp_vals: Dict[str, np.ndarray], out_path: Path) -> None:
     fig = plt.figure()
     ax = fig.add_subplot(111)
 
-    labels = list(tp_vals.keys())
+    # --- compute mean rmse per model ---
+    sort_items = []
+    for k, v in tp_vals.items():
+        vals = v[np.isfinite(v)]
+        mean = np.mean(vals) if vals.size else np.inf
+        sort_items.append((k, mean))
+
+    # --- sort by rmse (best model left) ---
+    sort_items.sort(key=lambda x: x[1])
+
+    labels = [k for k, _ in sort_items]
+    labels_pretty = [
+        f"{_pretty_name(k)}\nμ={np.mean(tp_vals[k]):.2f}px" for k in labels
+    ]
     data = [tp_vals[k][np.isfinite(tp_vals[k])] for k in labels]
 
-    ax.boxplot(data, labels=labels, showfliers=True)
+    ax.boxplot(data, labels=labels_pretty, showfliers=True)
+
     ax.set_ylabel("Symmetric curve RMSE (px)")
     ax.set_title("RMSE (sym) distribution (TP lanes only)")
-    ax.tick_params(axis="x", rotation=18)
+    ax.tick_params(axis="x", labelsize=6)
 
     fig.tight_layout()
     fig.savefig(out_path, dpi=220)
