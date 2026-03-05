@@ -486,11 +486,11 @@ Aus Frame-Ordner:
 python src/infer_export_video_nn.py \
   --ckpt artifacts/train_bspline_m4/best.pt \
   --method bspline \
-  --frames /path/to/exported_frames \
-  --out artifacts/demo/bspline_m4_demo.mp4 \
+  --frames /workspace/artifacts/infer_videodemo/input/xyz \
+  --out /workspace/artifacts/infer_videodemo/output/xyz.mp4 \
   --fps 20 \
   --exist-thr 0.5 \
-  --draw-ctrl
+  --draw-ctrl \
   --encode ffmpeg
 
 Aus video Datei:
@@ -498,10 +498,10 @@ Aus video Datei:
 python src/infer_export_video_nn.py \
   --ckpt artifacts/train_bspline_m4/best.pt \
   --method bspline \
-  --video /path/to/input.mp4 \
-  --out artifacts/demo/bspline_m4_demo.mp4 \
+  --video /workspace/artifacts/infer_videodemo/input/xyz.mp4 \
+  --out /workspace/artifacts/infer_videodemo/output/2024-04-04-11-57-06.mp4 \
   --fps 20 \
-  --exist-thr 0.5
+  --exist-thr 0.5 \
   --encode ffmpeg
 
 """

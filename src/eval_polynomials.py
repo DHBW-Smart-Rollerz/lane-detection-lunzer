@@ -664,5 +664,5 @@ if __name__ == "__main__":
 
 # Beispielnutzung:
 # python /workspace/src/eval_polynomials.py --results /workspace/artifacts/results_poly_raw.csv
-# python /workspace/src/eval_polynomials.py --results /workspace/artifacts/results_poly_densified_step2p0px
+# python /workspace/src/eval_polynomials.py --results /workspace/artifacts/results_poly_densified_step10p0px.csv
 # python /workspace/src/eval_polynomials.py --results /workspace/artifacts/results_poly_raw.csv --only-full
