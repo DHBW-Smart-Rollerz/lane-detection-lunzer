@@ -465,14 +465,24 @@ def plot_metric_stats_by_ctrlpts(
 
     fig = plt.figure()
     ax = fig.add_subplot(111)
-    ax.plot(x, sub["mean"], marker="o", label="mean")
-    ax.plot(x, sub["median"], marker="o", label="median")
-    ax.plot(x, sub["p90"], marker="o", label="p90")
+    ax.plot(x, sub["mean"], marker="o", label="Mittelwert")
+    ax.plot(x, sub["median"], marker="o", label="Median")
+    ax.plot(x, sub["p90"], marker="o", label="90%-Quantil")
 
     ax.set_xticks(x, [str(int(m)) for m in ctrl])
-    ax.set_xlabel("B-spline control points")
-    ax.set_ylabel(f"{metric} (px)")
-    ax.set_title(f"{metric} statistics over successful lane fits")
+    ax.set_xlabel("B-Spline Kontrollpunkte")
+    if metric == "rmse_dist_px_used":
+        ax.set_ylabel("Geometrischer RMSE zu Originalpunkten (Pixel)")
+    elif metric == "mae_dist_px_used":
+        ax.set_ylabel("MAE in x-Richtung (px)")
+    elif metric == "medae_dist_px_used":
+        ax.set_ylabel("Medianfehler in x-Richtung (px)")
+    elif metric == "maxae_dist_px_used":
+        ax.set_ylabel("Maximalfehler in x-Richtung (px)")
+    else:
+        ax.set_ylabel(f"{metric} (px)")
+    ax.legend()
+    # ax.set_title(f"{metric} statistics over successful lane fits")
     ax.legend()
 
     fig.tight_layout()
@@ -615,6 +625,10 @@ def main() -> None:
         for m in existing:
             plot_metric_stats_by_ctrlpts(
                 lane_stats, out_dir / f"fig_{m}_stats_vs_ctrlpts.png", metric=m
+            )
+        for m in existing:
+            plot_metric_stats_by_ctrlpts(
+                lane_stats, out_dir / f"fig_{m}_stats_vs_ctrlpts.pdf", metric=m
             )
 
         plot_metric_boxplot(

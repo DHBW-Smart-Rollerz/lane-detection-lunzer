@@ -352,6 +352,102 @@ def export_best_worst(
         _save(worst, worst_dir)
 
 
+def export_specific_image(
+    results_csv: str,
+    out_dir: str,
+    metric: str,
+    degrees: Iterable[int],
+    only_full: bool,
+    specific_image: str,
+):
+    """
+    Export overlays for one user-selected image across all requested degrees.
+
+    The image can be selected either by:
+    - exact match on image_path
+    - substring match on image_path
+
+    Output structure:
+        <out_dir>/<variant>/specific/deg{d}/...
+
+    Args:
+        results_csv:
+            Path to the CSV file produced by fit_polynomials.
+        out_dir:
+            Output base directory for visualizations.
+        metric:
+            Error metric used for annotation.
+        degrees:
+            Polynomial degrees to export.
+        only_full:
+            If True, only export images where all present lanes were fitted
+            successfully.
+        specific_image:
+            Exact or partial image_path string identifying the desired image.
+    """
+    variant = _infer_variant_from_results_path(results_csv)
+    out_base = Path(out_dir) / variant / "specific"
+    out_base.mkdir(parents=True, exist_ok=True)
+
+    res = _prepare_results(results_csv, metric)
+    gt_df = get_current_data()
+
+    # exact match preferred, fallback to substring match
+    exact_matches = res[res["image_path"] == specific_image].copy()
+
+    if not exact_matches.empty:
+        matched_paths = exact_matches["image_path"].drop_duplicates().tolist()
+    else:
+        contains_matches = res[
+            res["image_path"].astype(str).str.contains(specific_image, regex=False)
+        ].copy()
+        matched_paths = contains_matches["image_path"].drop_duplicates().tolist()
+
+    if not matched_paths:
+        raise RuntimeError(
+            f"No image found for --specific-image='{specific_image}'. "
+            "Provide a full image_path or a unique substring."
+        )
+
+    if len(matched_paths) > 1:
+        matches_preview = "\n".join(f"  - {p}" for p in matched_paths[:10])
+        raise RuntimeError(
+            "Multiple images matched --specific-image. Please be more specific.\n"
+            f"Matches:\n{matches_preview}"
+        )
+
+    target_path = matched_paths[0]
+
+    for deg in degrees:
+        groups = _groups_for_degree(res, deg, metric, only_full=only_full)
+        if groups.empty:
+            continue
+
+        match = groups[groups["image_path"] == target_path].copy()
+        if match.empty:
+            print(
+                f"[INFO] Image found, but no exportable result for degree={deg} "
+                f"(maybe filtered by --only-full or no successful fit)."
+            )
+            continue
+
+        deg_dir = out_base / f"deg{deg}"
+        deg_dir.mkdir(parents=True, exist_ok=True)
+
+        g = match.iloc[0]
+        img = render_overlay_all_lanes(g, res, gt_df, metric)
+
+        val = float(g["rmse_mean"])
+        task = str(g["task_name"])
+        img_id = str(g["image_id"])
+        base = Path(target_path).stem
+
+        fname = f"{val:07.2f}_task-{task}_img-{img_id}_deg{deg}_{base}.png"
+        cv2.imwrite(str(deg_dir / fname), img)
+
+    print(f"[OK] Exported specific image to: {out_base}")
+
+
 def export_compare_best_worst(
     *,
     results_raw_csv: str,
@@ -825,6 +921,12 @@ def main():
         help="Ranking strategy for compare mode.",
     )
 
+    # --- specific mode ---
+    p.add_argument(
+        "--specific-image",
+        help="Export one specific image across all requested degrees. Accepts full image_path or a uniqie substring of it.",
+    )
+
     args = p.parse_args()
 
     # ----------------------------
@@ -879,14 +981,25 @@ def main():
         )
     else:
         degrees = [args.degree] if args.degree is not None else [2, 3, 4, 5, 6]
-        export_best_worst(
-            args.results,
-            args.out,
-            args.n,
-            args.metric,
-            degrees=degrees,
-            only_full=args.only_full,
-        )
+
+        if args.specific_image is not None:
+            export_specific_image(
+                results_csv=args.results,
+                out_dir=args.out,
+                metric=args.metric,
+                degrees=degrees,
+                only_full=args.only_full,
+                specific_image=args.specific_image,
+            )
+        else:
+            export_best_worst(
+                args.results,
+                args.out,
+                args.n,
+                args.metric,
+                degrees=degrees,
+                only_full=args.only_full,
+            )
 
 
 if __name__ == "__main__":
@@ -906,3 +1019,6 @@ if __name__ == "__main__":
     #
     # Compare stream: (sollte man nur mit only-full verwenden)
     # /usr/local/bin/python /workspace/src/vis_polynomials.py --compare --results-raw artifacts/results_poly_raw.csv --results-dens artifacts/results_poly_densified_step10p0px.csv --rank-by delta --only-full --stream --degree 3
+    #
+    # Alle Geraden für ein bestimmtes Bild exportieren
+    # /usr/local/bin/python /workspace/src/vis_polynomials.py --results /workspace/artifacts/results_poly_raw.csv --specific-image /workspace/data/2023-05/img/2023-05-24-17-54-35/2023-05-24-17-54-35_frame000245.png

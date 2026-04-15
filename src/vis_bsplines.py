@@ -195,6 +195,67 @@ def _groups_for_ctrlpoints(
     return agg
 
 
+def _find_group_for_specific_image(
+    res: pd.DataFrame,
+    image_query: str,
+    n_control_points: int,
+    metric: str,
+    only_full: bool,
+) -> pd.Series | None:
+    """
+    Find one image-group row for a specific image and control-point count.
+
+    Matching strategy:
+    - exact match on image_path
+    - fallback: basename match on image_path
+
+    Returns:
+        A one-row Series with GROUP_KEYS + ["metric_mean", "n_lanes_ok"],
+        or None if no suitable group exists.
+    """
+    r = res.copy()
+
+    if only_full:
+        full_groups = _filter_only_full_groups(r, n_control_points)
+        r = r.merge(full_groups, on=GROUP_KEYS, how="inner")
+
+    r = r[
+        (r["n_control_points"] == n_control_points) & (r["fit_success"] == True)
+    ].copy()  # noqa: E712
+
+    if r.empty:
+        return None
+
+    r[metric] = pd.to_numeric(r[metric], errors="coerce")
+    r = r[np.isfinite(r[metric])]
+
+    if r.empty:
+        return None
+
+    image_query = str(image_query)
+
+    # exact full-path match
+    sub = r[r["image_path"] == image_query].copy()
+
+    # fallback: basename match
+    if sub.empty:
+        qbase = os.path.basename(image_query)
+        sub = r[r["image_path"].map(os.path.basename) == qbase].copy()
+
+    if sub.empty:
+        return None
+
+    agg = sub.groupby(GROUP_KEYS, as_index=False).agg(
+        metric_mean=(metric, "mean"),
+        n_lanes_ok=("lane", "count"),
+    )
+
+    if agg.empty:
+        return None
+
+    return agg.iloc[0]
+
+
 # ---------------------------
 # B-spline reconstruction + drawing
 # ---------------------------
@@ -445,6 +506,73 @@ def export_best_worst(
         _save(worst, worst_dir)
 
 
+def export_specific(
+    results_csv: str,
+    out_dir: str,
+    metric: str,
+    image_query: str,
+    n_control_points_list: Iterable[int],
+    only_full: bool,
+    curve_samples: int,
+    show_ctrl: bool,
+):
+    """
+    Export visualizations for one specific image across multiple control-point counts.
+
+    Output structure:
+        <out_dir>/<variant>/specific/ctrl{m}/...
+    """
+    variant = _infer_variant_from_results_path(results_csv)
+
+    out_base = Path(out_dir) / variant / "specific"
+    out_base.mkdir(parents=True, exist_ok=True)
+
+    res = _prepare_results(results_csv, metric)
+    gt_df = get_current_data()
+
+    found_any = False
+
+    for m in n_control_points_list:
+        g = _find_group_for_specific_image(
+            res=res,
+            image_query=image_query,
+            n_control_points=int(m),
+            metric=metric,
+            only_full=only_full,
+        )
+        if g is None:
+            print(
+                f"[specific] no successful fit found for ctrl={m} and image={image_query}"
+            )
+            continue
+
+        found_any = True
+        folder = out_base / f"ctrl{m}"
+        folder.mkdir(parents=True, exist_ok=True)
+
+        img = render_overlay_all_lanes(
+            g,
+            res,
+            gt_df,
+            metric,
+            curve_samples=curve_samples,
+            show_ctrl=show_ctrl,
+        )
+
+        val = float(g["metric_mean"])
+        task = str(g["task_name"])
+        img_id = str(g["image_id"])
+        base = os.path.basename(str(g["image_path"]))
+        fname = f"{val:07.2f}_task-{task}_img-{img_id}_ctrl{m}_{base}"
+        cv2.imwrite(str(folder / fname), img)
+        print(f"[specific] wrote {folder / fname}")
+
+    if not found_any:
+        raise RuntimeError(
+            f"No matching successful fits found for image query: {image_query}"
+        )
+
+
 def stream(
     results_csv: str,
     interval_s: float,
@@ -690,6 +818,13 @@ def main():
         action="store_true",
         help="Disable drawing of control polygon / control points.",
     )
+    p.add_argument(
+        "--specific-image",
+        type=str,
+        default=None,
+        help="Render one specific image across all control-point counts. "
+        "Accepts full image_path or just the basename.",
+    )
 
     args = p.parse_args()
     show_ctrl = not args.no_ctrl
@@ -705,6 +840,17 @@ def main():
             curve_samples=args.curve_samples,
             show_ctrl=show_ctrl,
             skip_missing=args.skip_missing,
+        )
+    elif args.specific_image:
+        export_specific(
+            results_csv=args.results,
+            out_dir=args.out,
+            metric=args.metric,
+            image_query=args.specific_image,
+            n_control_points_list=args.ctrl_list,
+            only_full=args.only_full,
+            curve_samples=args.curve_samples,
+            show_ctrl=show_ctrl,
         )
     else:
         export_best_worst(
@@ -729,3 +875,6 @@ if __name__ == "__main__":
     #
     # IN ORDER
     # python src/vis_bsplines.py --results artifacts/results_bspline_densified_step10p0px.csv --stream --mode order --n-control-points 4 --interval 1
+    #
+    # SPECIFIC IMAGE
+    # python /workspace/src/vis_bsplines.py --results /workspace/artifacts/results_bspline_densified_step10p0px.csv --specific-image /workspace/data/2023-05/img/2023-05-24-17-54-35/2023-05-24-17-54-35_frame000245.png --ctrl-list 4 6 8
