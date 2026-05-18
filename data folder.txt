@@ -1,0 +1,25 @@
+Ordnerbenennung nach Label Server Task (Jahr-Monat)
+Ordnerinhalt label: Exportiert aus Labelserver (alle completed Jobs des Tasks)
+Ordnerinhalt img: Heruntergeladen vom NAS Daten/cvat/rosbags/Jahr-Monat-xx-yyyyyyyy
+
+Beispiel:
+
+2023-05 (Folder)
+	img (Folder)
+		2023-05-24-17-46-49 (Folder)
+			Image1
+			Image2
+		2023-05-24-17-47-27 (Folder)
+			Image1
+			Image2
+	label(Folder)
+
+2023-06 (Folder)
+	img (Folder)
+		2023-06-28-15-07-49
+			Image1
+			Image2
+		2023-06-28-15-09-30
+			Image1
+			Image2
+	label(Folder)

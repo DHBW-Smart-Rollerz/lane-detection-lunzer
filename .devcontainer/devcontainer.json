@@ -1,0 +1,14 @@
+{
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "donjayamanne.python-extension-pack"
+      ]
+    }
+  },
+  "dockerComposeFile": "../.docker/docker-compose.yaml",
+  "name": "lane-detection-lunzer",
+  "service": "lanenet-ml",
+  "workspaceFolder": "/workspace"
+}
